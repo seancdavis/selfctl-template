@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "aea02db6-e474-41ba-9178-4e9d05c2ad03",
+  "id": "95380c42-f321-4cea-9d07-e02737dd0275",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -31,11 +31,11 @@
       "schema": "public"
     },
     {
-      "type": "uuid",
+      "type": "integer",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": "gen_random_uuid()",
+      "default": "1",
       "generated": null,
       "identity": null,
       "name": "id",
@@ -52,19 +52,6 @@
       "generated": null,
       "identity": null,
       "name": "connection_token",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "config"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "true",
-      "generated": null,
-      "identity": null,
-      "name": "singleton",
       "entityType": "columns",
       "schema": "public",
       "table": "config"
@@ -344,15 +331,11 @@
       "entityType": "pks"
     },
     {
-      "nameExplicit": false,
-      "columns": [
-        "singleton"
-      ],
-      "nullsNotDistinct": false,
-      "name": "config_singleton_key",
+      "value": "\"id\" = 1",
+      "name": "config_single_row",
+      "entityType": "checks",
       "schema": "public",
-      "table": "config",
-      "entityType": "uniques"
+      "table": "config"
     }
   ],
   "renames": []

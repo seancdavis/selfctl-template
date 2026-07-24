@@ -1,6 +1,8 @@
+import { sql } from "drizzle-orm";
 import {
   bigserial,
-  boolean,
+  check,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -46,18 +48,21 @@ export const notes = pgTable("notes", {
 
 // Single-row deploy config: holds the minted connection token clients use as
 // their bearer (auth model in the README/handoff — two tiers, this is the
-// non-admin one). `singleton` is always `true` and carries a unique
-// constraint, so the database itself enforces that at most one row can ever
-// exist. `getOrCreateConnectionToken` creates it lazily and race-safely on
-// first read.
-export const config = pgTable("config", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  connectionToken: text("connection_token").notNull(),
-  singleton: boolean("singleton").notNull().default(true).unique(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+// non-admin one). `id` is fixed to `1` and a check constraint enforces it, so
+// the database itself guarantees at most one row can ever exist — not just
+// at most one "true" row. `getOrCreateConnectionToken` creates it lazily and
+// race-safely on first read.
+export const config = pgTable(
+  "config",
+  {
+    id: integer("id").primaryKey().default(1),
+    connectionToken: text("connection_token").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [check("config_single_row", sql`${table.id} = 1`)],
+);
 
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;

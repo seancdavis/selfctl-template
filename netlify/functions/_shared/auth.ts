@@ -66,15 +66,15 @@ export async function getOrCreateConnectionToken(db: Db): Promise<string> {
     return existing.connectionToken;
   }
 
-  // Race-safe mint: `singleton` carries a unique constraint, so if two
-  // requests both see no row and race to insert, only one insert lands and
-  // the other is a no-op. Either way, the re-select below returns the one
-  // row that actually exists, so concurrent first-mints converge on the same
-  // token instead of erroring or creating a second row.
+  // Race-safe mint: `id` is fixed to `1` (enforced by a check constraint), so
+  // if two requests both see no row and race to insert, only one insert
+  // lands and the other is a no-op. Either way, the re-select below returns
+  // the one row that actually exists, so concurrent first-mints converge on
+  // the same token instead of erroring or creating a second row.
   const connectionToken = randomBytes(24).toString("hex");
   await db
     .insert(config)
-    .values({ connectionToken, singleton: true })
+    .values({ id: 1, connectionToken })
     .onConflictDoNothing();
 
   const [row] = await db.select().from(config).limit(1);

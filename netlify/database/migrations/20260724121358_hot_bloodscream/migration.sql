@@ -1,8 +1,8 @@
 CREATE TABLE "config" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	"id" integer PRIMARY KEY DEFAULT 1,
 	"connection_token" text NOT NULL,
-	"singleton" boolean DEFAULT true NOT NULL UNIQUE,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "config_single_row" CHECK ("id" = 1)
 );
 --> statement-breakpoint
 CREATE TABLE "events" (
