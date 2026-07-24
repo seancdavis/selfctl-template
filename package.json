@@ -1,0 +1,22 @@
+{
+  "name": "@selfctl/reference-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "netlify database migrations apply",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@netlify/database": "^1.1.0",
+    "drizzle-orm": "1.0.0-beta.22",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^5.3.0",
+    "@types/node": "^24.0.0",
+    "drizzle-kit": "1.0.0-beta.22",
+    "typescript": "^5.5.0"
+  }
+}

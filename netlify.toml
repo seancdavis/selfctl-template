@@ -1,0 +1,18 @@
+# Deploy this agent as its own Netlify project. When creating the site, set the
+# base directory to `agents/reference` so this file drives the build.
+# `@netlify/database` in deps auto-provisions Postgres and applies the migrations
+# in netlify/database/migrations at deploy time. Set AGENT_ADMIN_KEY in the site
+# env — it's the deploy-time root secret; the connection token clients actually
+# use is minted from it via the admin-gated UI (see README).
+[build]
+  publish = "public"
+
+[build.environment]
+  NODE_VERSION = "24"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[template.environment]
+  AGENT_ADMIN_KEY = "Deploy-time root secret for this agent. Only the deployer knows it. Used to unlock the admin UI at the deployed site, which reveals the connection token that clients (e.g. the desktop app) use to talk to the agent. Set this to a long, random value."
