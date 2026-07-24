@@ -4,14 +4,15 @@ A minimal, deployable, protocol-conformant **selfctl agent** — a Netlify site
 that implements the selfctl agent protocol over HTTP. Fork it, deploy it, and
 you have a running agent in minutes.
 
-The turn logic is **stubbed today** (no LLM): every `POST /message`
-deterministically appends `turn.started`, proposes a `reference.note` from
-the raw text, appends `proposal.created`, then `turn.finished`. Approving (or
-overriding) the proposal writes a row to the `notes` table — the only domain
-write this starter knows how to make. The point of this stub is to prove the
-protocol loop — message → cursored event log → human decision on a proposal —
-end to end before the real agent core (an LLM-backed turn) lands in a later
-phase.
+`POST /message` runs a real LLM turn via `runTurn` from
+[`@selfctl/agent-kit`](https://www.npmjs.com/package/@selfctl/agent-kit): the
+model can call a `createNote` tool, which proposes a `reference.note` — it
+never writes anything itself. Approving (or overriding) the proposal is what
+actually runs the skill's `write()` and lands a row in the `notes` table, via
+agent-kit's gate (`POST /proposals/:id/decision`). That message → LLM →
+proposal → human decision → write loop, over the cursored event log, is the
+whole point of this starter: it's the smallest possible agent that's
+conformant with the selfctl agent protocol.
 
 ## Deploy
 
@@ -21,10 +22,12 @@ phase.
 2. When prompted, set `AGENT_ADMIN_KEY` to a long, random value — this is the
    deploy-time root secret for your agent. Only you (the deployer) should
    know it.
-3. Once the deploy finishes, open the deployed site.
-4. Enter your admin key in the **Unlock** form and click **Unlock** — this
+3. Also set `OPENROUTER_API_KEY` (an [OpenRouter](https://openrouter.ai/keys)
+   API key) — `POST /message` needs it to run the LLM turn.
+4. Once the deploy finishes, open the deployed site.
+5. Enter your admin key in the **Unlock** form and click **Unlock** — this
    reveals the connection token.
-5. Copy the connection token and hand it to whatever client will talk to the
+6. Copy the connection token and hand it to whatever client will talk to the
    agent (e.g. a desktop app), or use it directly as the bearer token for the
    protocol endpoints below.
 
@@ -51,8 +54,8 @@ This agent uses the framework's two-tier auth model:
 netlify dev
 ```
 
-Set `AGENT_ADMIN_KEY` in the site's environment (or a local `.env`) before
-starting.
+Set `AGENT_ADMIN_KEY` and `OPENROUTER_API_KEY` in the site's environment (or a
+local `.env`) before starting.
 
 ## Using the UI
 
@@ -122,11 +125,17 @@ do anything a client can.
 ## Fork & customize
 
 This repo is a starting point, not a finished product. Fork it, rename the
-agent identity in `netlify/functions/_shared/agent.ts`, and start wiring in
-real turn logic where `netlify/functions/message.ts` currently stubs one out.
-The protocol surface (events, proposals, decisions, summary) and the auth
-model are meant to stay — they're what makes an agent built this way
-conformant with the selfctl agent protocol.
+agent identity in `netlify/functions/_shared/agent.ts`, and add your own
+skills next to `netlify/functions/_shared/skills/notes.ts` (each skill is a
+`Skill` from `@selfctl/agent-kit` — one or more `defineProposalKind`s, plus
+the tools the model calls to propose them — registered in
+`netlify/functions/_shared/deps.ts`'s `buildRegistry([...])` call). The
+protocol surface (events, proposals, decisions, summary) and the auth model
+are meant to stay — they're what makes an agent built this way conformant
+with the selfctl agent protocol.
+
+Conversation memory is intentionally out of scope for this starter: `runTurn`
+is called with `history: []` (single-turn) — there's no messages table.
 
 ## License
 

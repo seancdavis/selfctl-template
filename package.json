@@ -11,7 +11,10 @@
   },
   "dependencies": {
     "@netlify/database": "^1.1.0",
+    "@selfctl/agent-kit": "^0.1.0",
+    "@selfctl/protocol": "^0.1.0",
     "drizzle-orm": "1.0.0-beta.22",
+    "postgres": "^3.4.9",
     "zod": "^3.23.0"
   },
   "devDependencies": {

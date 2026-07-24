@@ -22,22 +22,31 @@ export const events = pgTable("events", {
 });
 
 // Proposals are the deterministic gate (spec §7.6): every domain write is a
-// proposal a human decides, never an unmediated write.
-export const proposals = pgTable("proposals", {
+// proposal a human decides, never an unmediated write. `pending_proposals` is
+// the exact table agent-kit's gate (`@selfctl/agent-kit/runtime`) reads and
+// writes via raw postgres.js SQL — the name and column set here mirror
+// agent-kit's own `0001_proposals.sql` precisely (id, agent_id, kind,
+// payload, status, feedback_note, parent_proposal_id, created_at,
+// resolved_at). There is deliberately no `turn_id`: agent-kit's INSERT never
+// sets one, and turn correlation already lives in the `events` log via each
+// event's own `turn_id` column.
+export const pendingProposals = pgTable("pending_proposals", {
   id: uuid("id").primaryKey().defaultRandom(),
   agentId: text("agent_id").notNull(),
-  turnId: uuid("turn_id"),
   kind: text("kind").notNull(),
   payload: jsonb("payload").notNull(),
   status: text("status").notNull().default("pending"),
+  feedbackNote: text("feedback_note"),
+  parentProposalId: uuid("parent_proposal_id"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 });
 
-// The stub proposal kind's write target: `reference.note` proposals, once
-// approved, land a row here.
+// The `reference.note` proposal kind's write target (see
+// `_shared/skills/notes.ts`): once a proposal is approved or overridden, its
+// `write()` lands a row here.
 export const notes = pgTable("notes", {
   id: uuid("id").primaryKey().defaultRandom(),
   text: text("text").notNull(),
@@ -66,8 +75,8 @@ export const config = pgTable(
 
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
-export type Proposal = typeof proposals.$inferSelect;
-export type NewProposal = typeof proposals.$inferInsert;
+export type PendingProposal = typeof pendingProposals.$inferSelect;
+export type NewPendingProposal = typeof pendingProposals.$inferInsert;
 export type Note = typeof notes.$inferSelect;
 export type NewNote = typeof notes.$inferInsert;
 export type Config = typeof config.$inferSelect;

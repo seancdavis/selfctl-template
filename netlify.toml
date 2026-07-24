@@ -14,3 +14,4 @@
 
 [template.environment]
   AGENT_ADMIN_KEY = "Deploy-time root secret for this agent. Only the deployer knows it. Used to unlock the admin UI at the deployed site, which reveals the connection token that clients (e.g. the desktop app) use to talk to the agent. Set this to a long, random value."
+  OPENROUTER_API_KEY = "An OpenRouter API key (https://openrouter.ai/keys). Used to run this agent's LLM turns — without it, POST /message cannot call the model."
