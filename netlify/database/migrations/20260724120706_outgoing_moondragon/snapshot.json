@@ -1,11 +1,17 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "a0c3b3e8-bdf5-42f5-afdf-b98797e1112e",
+  "id": "aea02db6-e474-41ba-9178-4e9d05c2ad03",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
   "ddl": [
+    {
+      "isRlsEnabled": false,
+      "name": "config",
+      "entityType": "tables",
+      "schema": "public"
+    },
     {
       "isRlsEnabled": false,
       "name": "events",
@@ -23,6 +29,58 @@
       "name": "proposals",
       "entityType": "tables",
       "schema": "public"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "config"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "connection_token",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "config"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "singleton",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "config"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "config"
     },
     {
       "type": "bigserial",
@@ -247,6 +305,16 @@
     },
     {
       "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "config_pkey",
+      "schema": "public",
+      "table": "config",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
         "seq"
       ],
       "nameExplicit": false,
@@ -274,6 +342,17 @@
       "schema": "public",
       "table": "proposals",
       "entityType": "pks"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "singleton"
+      ],
+      "nullsNotDistinct": false,
+      "name": "config_singleton_key",
+      "schema": "public",
+      "table": "config",
+      "entityType": "uniques"
     }
   ],
   "renames": []

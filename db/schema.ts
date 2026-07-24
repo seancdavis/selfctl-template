@@ -1,5 +1,6 @@
 import {
   bigserial,
+  boolean,
   jsonb,
   pgTable,
   text,
@@ -45,11 +46,14 @@ export const notes = pgTable("notes", {
 
 // Single-row deploy config: holds the minted connection token clients use as
 // their bearer (auth model in the README/handoff — two tiers, this is the
-// non-admin one). There's exactly one row; `getOrCreateConnectionToken`
-// creates it lazily on first read.
+// non-admin one). `singleton` is always `true` and carries a unique
+// constraint, so the database itself enforces that at most one row can ever
+// exist. `getOrCreateConnectionToken` creates it lazily and race-safely on
+// first read.
 export const config = pgTable("config", {
   id: uuid("id").primaryKey().defaultRandom(),
   connectionToken: text("connection_token").notNull(),
+  singleton: boolean("singleton").notNull().default(true).unique(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

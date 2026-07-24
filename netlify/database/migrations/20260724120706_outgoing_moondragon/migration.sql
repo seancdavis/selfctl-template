@@ -1,3 +1,10 @@
+CREATE TABLE "config" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+	"connection_token" text NOT NULL,
+	"singleton" boolean DEFAULT true NOT NULL UNIQUE,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "events" (
 	"seq" bigserial PRIMARY KEY,
 	"agent_id" text NOT NULL,
