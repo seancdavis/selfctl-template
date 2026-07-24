@@ -10,7 +10,7 @@ import { AGENT_ID } from "./_shared/agent";
 import { requireClient } from "./_shared/auth";
 import { agentSql, buildDeps } from "./_shared/deps";
 import { appendEvent } from "./_shared/events";
-import { SYSTEM_PROMPT } from "./_shared/system";
+import { redactSecrets } from "./_shared/redact";
 
 const Body = z.object({
   threadId: z.string().optional(),
@@ -77,7 +77,7 @@ export default async (req: Request): Promise<Response> => {
     try {
       const openrouter = createOpenRouterClient(deps.config);
       const result = await runTurn(
-        { systemPrompt: SYSTEM_PROMPT, history: [], userInput: body.text },
+        { systemPrompt: deps.systemPrompt, history: [], userInput: body.text },
         logger,
         deps,
         openrouter,
@@ -113,7 +113,10 @@ export default async (req: Request): Promise<Response> => {
       // can't `instanceof`-narrow them — but the protocol's contract here is
       // the same regardless: surface the failure in the event stream, not as
       // an HTTP error, so pollers see it.
-      const message = err instanceof Error ? err.message : String(err);
+      console.error("message: turn error", err);
+      const message = redactSecrets(
+        err instanceof Error ? err.message : String(err),
+      );
       await appendEvent(db, {
         agentId: AGENT_ID,
         turnId,

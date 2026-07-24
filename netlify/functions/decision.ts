@@ -66,10 +66,6 @@ export default async (req: Request, context: Context): Promise<Response> => {
     return jsonResponse({ error: "proposal is not pending" }, 409);
   }
 
-  if (body.verb === "override" && body.payload === undefined) {
-    return jsonResponse({ error: "override requires a payload" }, 400);
-  }
-
   const sql = agentSql();
   try {
     const deps = buildDeps(sql);
@@ -97,10 +93,26 @@ export default async (req: Request, context: Context): Promise<Response> => {
       }
     } catch (err) {
       // Our guard above already confirmed the proposal existed and was
-      // pending; reaching here means it was resolved concurrently between
-      // that check and the gate's own row lock — a genuine race, so 409.
-      const message = err instanceof Error ? err.message : String(err);
-      return jsonResponse({ error: message }, 409);
+      // pending, so a thrown error here means one of two things: either it
+      // was resolved concurrently between that check and the gate's own row
+      // lock (a race — 409), or the gate itself failed for a real reason
+      // (e.g. the skill's `write()` errored — 500). Re-read the row to tell
+      // them apart, since agent-kit's error classes aren't exported from the
+      // published package (verified against dist/*.d.ts) and can't be
+      // `instanceof`-narrowed. Never echo `err.message` to the client — log
+      // it server-side only.
+      console.error("decision: gate error", err);
+
+      const [after] = await db
+        .select()
+        .from(pendingProposals)
+        .where(eq(pendingProposals.id, id))
+        .limit(1);
+
+      if (!after || after.status !== "pending") {
+        return jsonResponse({ error: "proposal is no longer pending" }, 409);
+      }
+      return jsonResponse({ error: "failed to resolve proposal" }, 500);
     }
 
     await appendEvent(db, {
