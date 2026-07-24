@@ -1,3 +1,10 @@
+CREATE TABLE "config" (
+	"id" integer PRIMARY KEY DEFAULT 1,
+	"connection_token" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "config_single_row" CHECK ("id" = 1)
+);
+--> statement-breakpoint
 CREATE TABLE "events" (
 	"seq" bigserial PRIMARY KEY,
 	"agent_id" text NOT NULL,

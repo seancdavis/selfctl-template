@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { db as dbClient } from "../../../db/index";
 import { config } from "../../../db/schema";
 
@@ -13,6 +13,22 @@ function bearerToken(req: Request): string | undefined {
   return header?.startsWith(BEARER_PREFIX)
     ? header.slice(BEARER_PREFIX.length)
     : undefined;
+}
+
+/**
+ * Constant-time string comparison for bearer tokens. Guards the byte length
+ * first (`timingSafeEqual` throws on mismatched lengths) so that a length
+ * mismatch also fails closed rather than throwing.
+ */
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+
+  if (bufA.length !== bufB.length) {
+    return false;
+  }
+
+  return timingSafeEqual(bufA, bufB);
 }
 
 function unauthorized(): Response {
@@ -32,7 +48,7 @@ export function requireAdmin(req: Request): Response | null {
   const expected = process.env.AGENT_ADMIN_KEY;
   const token = bearerToken(req);
 
-  if (!expected || !token || token !== expected) {
+  if (!expected || !token || !safeEqual(token, expected)) {
     return unauthorized();
   }
 
@@ -50,11 +66,21 @@ export async function getOrCreateConnectionToken(db: Db): Promise<string> {
     return existing.connectionToken;
   }
 
+  // Race-safe mint: `id` is fixed to `1` (enforced by a check constraint), so
+  // if two requests both see no row and race to insert, only one insert
+  // lands and the other is a no-op. Either way, the re-select below returns
+  // the one row that actually exists, so concurrent first-mints converge on
+  // the same token instead of erroring or creating a second row.
   const connectionToken = randomBytes(24).toString("hex");
-  const [row] = await db.insert(config).values({ connectionToken }).returning();
+  await db
+    .insert(config)
+    .values({ id: 1, connectionToken })
+    .onConflictDoNothing();
+
+  const [row] = await db.select().from(config).limit(1);
 
   if (!row) {
-    throw new Error("getOrCreateConnectionToken: insert returned no row");
+    throw new Error("getOrCreateConnectionToken: no config row after insert");
   }
 
   return row.connectionToken;
@@ -78,12 +104,12 @@ export async function requireClient(
   }
 
   const adminKey = process.env.AGENT_ADMIN_KEY;
-  if (adminKey && token === adminKey) {
+  if (adminKey && safeEqual(token, adminKey)) {
     return null;
   }
 
   const connectionToken = await getOrCreateConnectionToken(db);
-  if (token !== connectionToken) {
+  if (!safeEqual(token, connectionToken)) {
     return unauthorized();
   }
 

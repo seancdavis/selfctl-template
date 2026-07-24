@@ -1,7 +1,8 @@
 {
-  "name": "@selfctl/reference-agent",
+  "name": "selfctl-agent-starter",
   "version": "0.0.0",
   "private": true,
+  "description": "A minimal, deployable, protocol-conformant selfctl agent starter.",
   "type": "module",
   "scripts": {
     "db:generate": "drizzle-kit generate",
