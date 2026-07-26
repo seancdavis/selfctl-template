@@ -1,10 +1,17 @@
 import type { Config, Context } from "@netlify/functions";
+import {
+  approve,
+  override,
+  reject,
+  rejectWithFeedback,
+} from "@selfctl/agent-kit/runtime";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { notes, proposals } from "../../db/schema";
+import { pendingProposals } from "../../db/schema";
 import { AGENT_ID } from "./_shared/agent";
 import { requireClient } from "./_shared/auth";
+import { agentSql, buildDeps } from "./_shared/deps";
 import { appendEvent } from "./_shared/events";
 
 const DecisionBody = z.object({
@@ -13,16 +20,6 @@ const DecisionBody = z.object({
   payload: z.unknown().optional(),
 });
 
-// The stub proposal kind's payload shape: `reference.note` proposals carry
-// the raw text a client sent in via `POST /message`.
-const NotePayload = z.object({ text: z.string() });
-
-const STATUS_BY_VERB = {
-  approve: "approved",
-  reject: "rejected",
-  override: "overridden",
-} as const;
-
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -30,10 +27,11 @@ function jsonResponse(body: unknown, status: number): Response {
   });
 }
 
-// POST /proposals/:id/decision — the deterministic gate. `approve` writes the
-// proposal's own payload to `notes`; `override` writes the caller-supplied
-// payload instead; `reject` writes nothing. Returns the resolved proposal
-// synchronously (protocol §4).
+// POST /proposals/:id/decision — the deterministic gate, for real: routes to
+// agent-kit's `approve`/`reject`/`rejectWithFeedback`/`override`
+// (`@selfctl/agent-kit/runtime`), which run the proposal kind's `write()`
+// inside a DB transaction for approve/override. Returns the resolved
+// proposal synchronously (protocol §4).
 export default async (req: Request, context: Context): Promise<Response> => {
   const unauthorized = await requireClient(req, db);
   if (unauthorized) return unauthorized;
@@ -50,52 +48,83 @@ export default async (req: Request, context: Context): Promise<Response> => {
     return jsonResponse({ error: "invalid body" }, 400);
   }
 
-  const [proposal] = await db
+  // Pre-check existence/pending status ourselves: agent-kit's not-found /
+  // not-pending errors (`ProposalNotFoundError` / `ProposalNotPendingError`)
+  // aren't exported from the published package (verified against
+  // dist/*.d.ts), so this is the "guard before calling" alternative the spec
+  // calls out — it also lets us return a clean 404/409 instead of a raw 500.
+  const [existing] = await db
     .select()
-    .from(proposals)
-    .where(eq(proposals.id, id))
+    .from(pendingProposals)
+    .where(eq(pendingProposals.id, id))
     .limit(1);
 
-  if (!proposal) {
+  if (!existing) {
     return jsonResponse({ error: "proposal not found" }, 404);
   }
-
-  if (proposal.status !== "pending") {
+  if (existing.status !== "pending") {
     return jsonResponse({ error: "proposal is not pending" }, 409);
   }
 
-  if (body.verb === "approve") {
-    const { text } = NotePayload.parse(proposal.payload);
-    await db.insert(notes).values({ text });
-  } else if (body.verb === "override") {
-    const parsedPayload = NotePayload.safeParse(body.payload);
-    if (!parsedPayload.success) {
-      return jsonResponse({ error: "override requires payload.text" }, 400);
+  const sql = agentSql();
+  try {
+    const deps = buildDeps(sql);
+
+    if (body.verb === "override") {
+      const kindDef = deps.registry.proposalKind(existing.kind);
+      if (!kindDef || !kindDef.schema.safeParse(body.payload).success) {
+        return jsonResponse(
+          { error: "override payload invalid for this proposal kind" },
+          400,
+        );
+      }
     }
-    await db.insert(notes).values({ text: parsedPayload.data.text });
+
+    let resolved: Awaited<ReturnType<typeof approve>>;
+    try {
+      if (body.verb === "approve") {
+        resolved = await approve(id, deps);
+      } else if (body.verb === "reject") {
+        resolved = body.note
+          ? await rejectWithFeedback(id, body.note, deps)
+          : await reject(id, deps);
+      } else {
+        resolved = await override(id, body.payload, deps);
+      }
+    } catch (err) {
+      // Our guard above already confirmed the proposal existed and was
+      // pending, so a thrown error here means one of two things: either it
+      // was resolved concurrently between that check and the gate's own row
+      // lock (a race — 409), or the gate itself failed for a real reason
+      // (e.g. the skill's `write()` errored — 500). Re-read the row to tell
+      // them apart, since agent-kit's error classes aren't exported from the
+      // published package (verified against dist/*.d.ts) and can't be
+      // `instanceof`-narrowed. Never echo `err.message` to the client — log
+      // it server-side only.
+      console.error("decision: gate error", err);
+
+      const [after] = await db
+        .select()
+        .from(pendingProposals)
+        .where(eq(pendingProposals.id, id))
+        .limit(1);
+
+      if (!after || after.status !== "pending") {
+        return jsonResponse({ error: "proposal is no longer pending" }, 409);
+      }
+      return jsonResponse({ error: "failed to resolve proposal" }, 500);
+    }
+
+    await appendEvent(db, {
+      agentId: AGENT_ID,
+      type: "proposal.resolved",
+      payload: { proposal: resolved },
+    });
+
+    return jsonResponse(resolved, 200);
+  } finally {
+    await sql.end();
   }
-
-  const [resolved] = await db
-    .update(proposals)
-    .set({
-      status: STATUS_BY_VERB[body.verb],
-      resolvedAt: new Date(),
-    })
-    .where(eq(proposals.id, id))
-    .returning();
-
-  if (!resolved) {
-    throw new Error("decision: update returned no row");
-  }
-
-  await appendEvent(db, {
-    agentId: AGENT_ID,
-    turnId: resolved.turnId,
-    type: "proposal.resolved",
-    payload: { proposal: resolved },
-  });
-
-  return jsonResponse(resolved, 200);
 };
 
 export const config: Config = {
