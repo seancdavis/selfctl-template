@@ -16,11 +16,21 @@ import { SYSTEM_PROMPT } from "./system";
  * uses) never read those fields; they're filled in with harmless values only
  * because `AgentConfig` requires them.
  */
-export function agentConfig(): AgentConfig {
-  const databaseUrl =
+// Netlify exposes the DB connection string as NETLIFY_DB_URL (what
+// @netlify/database + drizzle-orm/netlify-db read — this is why the Drizzle
+// `db` client connects); some setups also surface NETLIFY_DATABASE_URL and its
+// _UNPOOLED variant. Accept any, preferring an unpooled URL. postgres.js runs
+// with `prepare:false`, so a pooled (pgBouncer) URL works too.
+function netlifyDbUrl(): string | undefined {
+  return (
     process.env.NETLIFY_DATABASE_URL_UNPOOLED ??
     process.env.NETLIFY_DATABASE_URL ??
-    "";
+    process.env.NETLIFY_DB_URL
+  );
+}
+
+export function agentConfig(): AgentConfig {
+  const databaseUrl = netlifyDbUrl() ?? "";
   const openrouterModel =
     process.env.OPENROUTER_MODEL ?? "anthropic/claude-3.5-haiku";
 
@@ -52,11 +62,10 @@ export function agentConfig(): AgentConfig {
  * closes this connection).
  */
 export function agentSql(): Sql {
-  const connectionString =
-    process.env.NETLIFY_DATABASE_URL_UNPOOLED ?? process.env.NETLIFY_DATABASE_URL;
+  const connectionString = netlifyDbUrl();
   if (!connectionString) {
     throw new Error(
-      "agentSql: neither NETLIFY_DATABASE_URL_UNPOOLED nor NETLIFY_DATABASE_URL is set",
+      "agentSql: no Netlify DB connection string set (checked NETLIFY_DATABASE_URL_UNPOOLED, NETLIFY_DATABASE_URL, NETLIFY_DB_URL)",
     );
   }
   return postgres(connectionString, { prepare: false });
