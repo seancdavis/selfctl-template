@@ -1,3 +1,4 @@
+import { getConnectionString } from "@netlify/database";
 import type { AgentConfig } from "@selfctl/agent-kit";
 import type { AgentContext } from "@selfctl/agent-kit/runtime";
 import { buildRegistry } from "@selfctl/agent-kit/runtime";
@@ -16,21 +17,8 @@ import { SYSTEM_PROMPT } from "./system";
  * uses) never read those fields; they're filled in with harmless values only
  * because `AgentConfig` requires them.
  */
-// Netlify exposes the DB connection string as NETLIFY_DB_URL (what
-// @netlify/database + drizzle-orm/netlify-db read — this is why the Drizzle
-// `db` client connects); some setups also surface NETLIFY_DATABASE_URL and its
-// _UNPOOLED variant. Accept any, preferring an unpooled URL. postgres.js runs
-// with `prepare:false`, so a pooled (pgBouncer) URL works too.
-function netlifyDbUrl(): string | undefined {
-  return (
-    process.env.NETLIFY_DATABASE_URL_UNPOOLED ??
-    process.env.NETLIFY_DATABASE_URL ??
-    process.env.NETLIFY_DB_URL
-  );
-}
-
 export function agentConfig(): AgentConfig {
-  const databaseUrl = netlifyDbUrl() ?? "";
+  const databaseUrl = getConnectionString();
   const openrouterModel =
     process.env.OPENROUTER_MODEL ?? "anthropic/claude-3.5-haiku";
 
@@ -57,18 +45,13 @@ export function agentConfig(): AgentConfig {
 /**
  * A postgres.js client on the Netlify DB connection string — the wire format
  * agent-kit's gate speaks (tagged-template SQL against `pending_proposals`).
- * Prefers the unpooled URL; `prepare: false` is pgBouncer-safe. Callers must
- * `sql.end()` when done (Netlify Functions are short-lived; nothing else
- * closes this connection).
+ * `@netlify/database`'s `getConnectionString()` resolves the right URL for the
+ * current environment (the prod DB, or a deploy preview's isolated branch) — no
+ * env-var names to hardcode. `prepare:false` keeps it pgBouncer-safe. Callers
+ * must `sql.end()` when done (Netlify Functions are short-lived).
  */
 export function agentSql(): Sql {
-  const connectionString = netlifyDbUrl();
-  if (!connectionString) {
-    throw new Error(
-      "agentSql: no Netlify DB connection string set (checked NETLIFY_DATABASE_URL_UNPOOLED, NETLIFY_DATABASE_URL, NETLIFY_DB_URL)",
-    );
-  }
-  return postgres(connectionString, { prepare: false });
+  return postgres(getConnectionString(), { prepare: false });
 }
 
 /**
