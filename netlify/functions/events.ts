@@ -16,9 +16,16 @@ export default async (req: Request): Promise<Response> => {
   const parsed = sinceParam ? Number(sinceParam) : 0;
   const since = Number.isFinite(parsed) ? parsed : 0;
 
+  // Sample the max seq BEFORE reading, so the idle cursor can't skip an event
+  // that lands mid-request. If a row is inserted between this sample and
+  // `readEvents`, `readEvents` (running second) still has `seq > since` and
+  // returns it, so `cursor = last.seq` delivers it now. If a row lands after
+  // `readEvents`, this batch is empty and `cursor = before < newSeq`, so the
+  // next poll (`since = before`) returns it. Either way, no silent skip.
+  const before = await maxSeq(db);
   const rows = await readEvents(db, since);
   const last = rows[rows.length - 1];
-  const cursor = last ? last.seq : await maxSeq(db);
+  const cursor = last ? last.seq : before;
 
   return new Response(JSON.stringify({ events: rows, cursor }), {
     status: 200,
