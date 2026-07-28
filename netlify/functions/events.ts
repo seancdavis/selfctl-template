@@ -1,10 +1,12 @@
 import type { Config } from "@netlify/functions";
 import { db } from "../../db";
 import { requireClient } from "./_shared/auth";
-import { readEvents } from "./_shared/events";
+import { maxSeq, readEvents } from "./_shared/events";
 
 // GET /events?since=<seq> — the whole live channel over HTTP (protocol §5).
-// Poll it; cursor is the max seq returned, or the since value when idle.
+// Poll it; cursor is the max seq returned, or — when idle — the log's true
+// current max seq (not the echoed `since`), so a redeploy/reset that restarts
+// `seq` moves the server cursor backwards and trips the app's reset-recovery.
 export default async (req: Request): Promise<Response> => {
   const unauthorized = await requireClient(req, db);
   if (unauthorized) return unauthorized;
@@ -16,7 +18,7 @@ export default async (req: Request): Promise<Response> => {
 
   const rows = await readEvents(db, since);
   const last = rows[rows.length - 1];
-  const cursor = last ? last.seq : since;
+  const cursor = last ? last.seq : await maxSeq(db);
 
   return new Response(JSON.stringify({ events: rows, cursor }), {
     status: 200,

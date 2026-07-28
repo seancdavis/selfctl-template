@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigserial,
   check,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -80,6 +81,66 @@ export const config = pgTable(
   (table) => [check("config_single_row", sql`${table.id} = 1`)],
 );
 
+// Chat threads + messages — the conversational transport state agent-kit
+// 0.2.0's exported `chatStore` (`@selfctl/agent-kit/runtime`:
+// createThread/listThreads/getThread/getMessages/appendUserMessage/
+// appendAssistantMessage/setThreadTitle/markRead) reads and writes via raw
+// postgres.js SQL. Like `pending_proposals`, the column names and types here
+// mirror agent-kit's own chat DDL (`migrations/0003_chat.sql` +
+// `0004_chat_model.sql`) precisely — chatStore addresses columns by name, so
+// they're load-bearing. This is trusted gate-half state (the same tier as the
+// `events` log), never written through the proposal/approval flow.
+export const chatThreads = pgTable(
+  "chat_threads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentId: text("agent_id").notNull(),
+    title: text("title"),
+    // Per-conversation model pin (agent-kit ADR-0018): NULL means "use the
+    // agent's default model". Set at thread create, never changed after.
+    model: text("model"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastReadAt: timestamp("last_read_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("chat_threads_agent_last_message_idx").on(
+      table.agentId,
+      table.lastMessageAt.desc(),
+    ),
+  ],
+);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => chatThreads.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    text: text("text").notNull(),
+    ts: timestamp("ts", { withTimezone: true }).defaultNow().notNull(),
+    proposalIds: uuid("proposal_ids").array(),
+    components: jsonb("components"),
+    cost: jsonb("cost"),
+    retryAttempt: integer("retry_attempt"),
+  },
+  (table) => [
+    check(
+      "chat_messages_role_check",
+      sql`${table.role} IN ('user', 'assistant')`,
+    ),
+    index("chat_messages_thread_ts_idx").on(table.threadId, table.ts),
+  ],
+);
+
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
 export type PendingProposal = typeof pendingProposals.$inferSelect;
@@ -88,3 +149,7 @@ export type Note = typeof notes.$inferSelect;
 export type NewNote = typeof notes.$inferInsert;
 export type Config = typeof config.$inferSelect;
 export type NewConfig = typeof config.$inferInsert;
+export type ChatThread = typeof chatThreads.$inferSelect;
+export type NewChatThread = typeof chatThreads.$inferInsert;
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type NewChatMessage = typeof chatMessages.$inferInsert;

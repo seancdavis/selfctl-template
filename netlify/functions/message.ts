@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { Config } from "@netlify/functions";
 import type { ActivityLogger } from "@selfctl/agent-kit/runtime";
-import { runTurn } from "@selfctl/agent-kit/runtime";
+import {
+  appendAssistantMessage,
+  appendUserMessage,
+  getMessages,
+  getThread,
+  runTurn,
+} from "@selfctl/agent-kit/runtime";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
@@ -13,7 +19,7 @@ import { appendEvent } from "./_shared/events";
 import { redactSecrets } from "./_shared/redact";
 
 const Body = z.object({
-  threadId: z.string().optional(),
+  threadId: z.string().uuid(),
   text: z.string().min(1),
 });
 
@@ -44,11 +50,15 @@ function buildActivityLogger(turnId: string): ActivityLogger {
   };
 }
 
-// POST /message — runs a real LLM turn via agent-kit's `runTurn`. The model
-// can call `createNote`, which proposes a `reference.note` (nothing is
-// written until a human approves it via `POST /proposals/:id/decision`).
-// Bracketed with turn.started / proposal.created (one per proposal the model
-// created) / turn.finished events, per protocol §5.
+// POST /message — persists the exchange and runs a real LLM turn via
+// agent-kit's `runTurn`, with the thread's prior history so the agent
+// remembers the conversation. The model can call `createNote`, which proposes
+// a `reference.note` (nothing is written until a human approves it via
+// `POST /proposals/:id/decision`). Chat state is persisted via agent-kit's
+// exported `chatStore` (`@selfctl/agent-kit/runtime`); each persisted message
+// is announced with a `chat.appended` event, and the thread with
+// `thread.updated`. Bracketed with turn.started / proposal.created (one per
+// proposal the model created) / turn.finished events, per protocol §5.
 export default async (req: Request): Promise<Response> => {
   const unauthorized = await requireClient(req, db);
   if (unauthorized) return unauthorized;
@@ -67,16 +77,39 @@ export default async (req: Request): Promise<Response> => {
     const deps = await buildDeps(sql, db);
     const logger = buildActivityLogger(turnId);
 
+    const threadId = body.threadId;
+
     await appendEvent(db, {
       agentId: AGENT_ID,
       turnId,
       type: "turn.started",
-      payload: { turnId, threadId: body.threadId ?? null },
+      payload: { turnId, threadId },
     });
 
     try {
+      // Conversation so far, BEFORE persisting the current user message — so
+      // the current input isn't double-counted in the history passed to
+      // `runTurn`.
+      const priorHistory = (await getMessages(threadId, deps)).map((m) => ({
+        role: m.role,
+        content: m.text,
+      }));
+
+      // Persist + announce the user's own line so the app can show it.
+      const userMsg = await appendUserMessage(threadId, body.text, deps);
+      await appendEvent(db, {
+        agentId: AGENT_ID,
+        turnId,
+        type: "chat.appended",
+        payload: { threadId, message: userMsg },
+      });
+
       const result = await runTurn(
-        { systemPrompt: deps.systemPrompt, history: [], userInput: body.text },
+        {
+          systemPrompt: deps.systemPrompt,
+          history: priorHistory,
+          userInput: body.text,
+        },
         logger,
         deps,
       );
@@ -98,6 +131,41 @@ export default async (req: Request): Promise<Response> => {
         }
       }
 
+      // Persist + announce the assistant reply (only on a successful turn, so
+      // a failure never leaves a half-persisted turn). `cost` matches the
+      // protocol's `ChatTurnCost` shape.
+      const cost = {
+        totalUsd: result.totalCostUsd,
+        inputTokens: result.totalInputTokens,
+        outputTokens: result.totalOutputTokens,
+        iterations: result.iterations,
+      };
+      const assistantMsg = await appendAssistantMessage(
+        threadId,
+        result.finalText,
+        {
+          proposalIds: result.proposalIds,
+          components: result.components,
+          cost,
+        },
+        deps,
+      );
+      await appendEvent(db, {
+        agentId: AGENT_ID,
+        turnId,
+        type: "chat.appended",
+        payload: { threadId, message: assistantMsg },
+      });
+
+      // Refresh the thread in the app's list (bumped lastMessageAt, etc.).
+      const thread = await getThread(threadId, deps);
+      await appendEvent(db, {
+        agentId: AGENT_ID,
+        turnId,
+        type: "thread.updated",
+        payload: { thread },
+      });
+
       await appendEvent(db, {
         agentId: AGENT_ID,
         turnId,
@@ -110,11 +178,19 @@ export default async (req: Request): Promise<Response> => {
       // from the published package (verified against dist/*.d.ts), so this
       // can't `instanceof`-narrow them — but the protocol's contract here is
       // the same regardless: surface the failure in the event stream, not as
-      // an HTTP error, so pollers see it.
+      // an HTTP error, so pollers see it. The user message is already
+      // persisted (before the turn); the assistant message is only persisted
+      // on success, so a failed turn never half-persists.
       console.error("message: turn error", err);
       const message = redactSecrets(
         err instanceof Error ? err.message : String(err),
       );
+      await appendEvent(db, {
+        agentId: AGENT_ID,
+        turnId,
+        type: "chat.error",
+        payload: { message },
+      });
       await appendEvent(db, {
         agentId: AGENT_ID,
         turnId,
