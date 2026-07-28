@@ -68,7 +68,7 @@ export default async (req: Request, context: Context): Promise<Response> => {
 
   const sql = agentSql();
   try {
-    const deps = buildDeps(sql);
+    const deps = await buildDeps(sql, db);
 
     if (body.verb === "override") {
       const kindDef = deps.registry.proposalKind(existing.kind);

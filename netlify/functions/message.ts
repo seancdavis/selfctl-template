@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Config } from "@netlify/functions";
 import type { ActivityLogger } from "@selfctl/agent-kit/runtime";
-import { createOpenRouterClient, runTurn } from "@selfctl/agent-kit/runtime";
+import { runTurn } from "@selfctl/agent-kit/runtime";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
@@ -64,7 +64,7 @@ export default async (req: Request): Promise<Response> => {
   const sql = agentSql();
 
   try {
-    const deps = buildDeps(sql);
+    const deps = await buildDeps(sql, db);
     const logger = buildActivityLogger(turnId);
 
     await appendEvent(db, {
@@ -75,12 +75,10 @@ export default async (req: Request): Promise<Response> => {
     });
 
     try {
-      const openrouter = createOpenRouterClient(deps.config);
       const result = await runTurn(
         { systemPrompt: deps.systemPrompt, history: [], userInput: body.text },
         logger,
         deps,
-        openrouter,
       );
 
       for (const proposalId of result.proposalIds) {

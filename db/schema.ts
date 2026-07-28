@@ -66,6 +66,13 @@ export const config = pgTable(
   {
     id: integer("id").primaryKey().default(1),
     connectionToken: text("connection_token").notNull(),
+    // Model + provider selection for `runTurn` (agent-kit 0.2.0's AIG/Anthropic
+    // provider seam). Defaults ARE the seed: a fresh deploy thinks on Netlify
+    // AI Gateway out-of-the-box, no third-party account or key required. The
+    // `openrouter` provider stays available as a future opt-in (see
+    // netlify.toml) but is not wired here.
+    provider: text("provider").notNull().default("netlify-aig"),
+    model: text("model").notNull().default("claude-haiku-4-5"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

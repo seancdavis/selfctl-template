@@ -12,6 +12,10 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+# This agent thinks on Netlify AI Gateway (the `config` table's `provider`
+# defaults to `netlify-aig`) — AIG is auto-enabled on every Netlify plan, so
+# no provider key is needed at deploy time. A `provider = 'openrouter'` row
+# plus an `OPENROUTER_API_KEY` env var is a future opt-in extension, not
+# wired into this template.
 [template.environment]
   AGENT_ADMIN_KEY = "Deploy-time root secret for this agent. Only the deployer knows it. Used to unlock the admin UI at the deployed site, which reveals the connection token that clients (e.g. the desktop app) use to talk to the agent. Set this to a long, random value."
-  OPENROUTER_API_KEY = "An OpenRouter API key (https://openrouter.ai/keys). Used to run this agent's LLM turns — without it, POST /message cannot call the model."
