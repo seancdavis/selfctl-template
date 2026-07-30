@@ -138,6 +138,15 @@
         </div>
       </section>
 
+      <section id="settings-section" hidden>
+        <h2>Model</h2>
+        <div class="row">
+          <select id="model-select" disabled></select>
+          <button id="save-model-btn" type="button" disabled>Save</button>
+        </div>
+        <p id="settings-status" class="status"></p>
+      </section>
+
       <section id="activity-section">
         <h2>Recent activity</h2>
         <div class="row">
@@ -161,6 +170,10 @@
       const tokenBox = document.getElementById("token-box");
       const tokenField = document.getElementById("token-field");
       const copyTokenBtn = document.getElementById("copy-token-btn");
+      const settingsSection = document.getElementById("settings-section");
+      const modelSelect = document.getElementById("model-select");
+      const saveModelBtn = document.getElementById("save-model-btn");
+      const settingsStatus = document.getElementById("settings-status");
       const refreshEventsBtn = document.getElementById("refresh-events-btn");
       const eventsStatus = document.getElementById("events-status");
       const eventsList = document.getElementById("events-list");
@@ -173,6 +186,11 @@
       function setEventsStatus(message, isError) {
         eventsStatus.textContent = message;
         eventsStatus.className = "status" + (isError ? " error" : "");
+      }
+
+      function setSettingsStatus(message, isError) {
+        settingsStatus.textContent = message;
+        settingsStatus.className = "status" + (isError ? " error" : "");
       }
 
       async function unlock() {
@@ -193,6 +211,7 @@
           if (res.status === 401) {
             adminKey = null;
             tokenBox.hidden = true;
+            settingsSection.hidden = true;
             refreshEventsBtn.disabled = true;
             setUnlockStatus("Invalid admin key.", true);
             return;
@@ -207,8 +226,10 @@
           adminKey = key;
           tokenField.value = data.connectionToken;
           tokenBox.hidden = false;
+          settingsSection.hidden = false;
           refreshEventsBtn.disabled = false;
           setUnlockStatus("Unlocked.", false);
+          loadSettings();
         } catch (err) {
           setUnlockStatus("Network error: " + err.message, true);
         } finally {
@@ -280,11 +301,93 @@
         }
       }
 
+      async function loadSettings() {
+        if (!adminKey) {
+          return;
+        }
+
+        modelSelect.disabled = true;
+        saveModelBtn.disabled = true;
+        setSettingsStatus("Loading…", false);
+
+        try {
+          const res = await fetch("/config/settings", {
+            headers: { Authorization: "Bearer " + adminKey },
+          });
+
+          if (res.status === 401) {
+            setSettingsStatus("Invalid admin key.", true);
+            return;
+          }
+
+          if (!res.ok) {
+            setSettingsStatus("Unexpected error (" + res.status + ").", true);
+            return;
+          }
+
+          const data = await res.json();
+          modelSelect.innerHTML = "";
+          for (const id of data.models || []) {
+            const option = document.createElement("option");
+            option.value = id;
+            option.textContent = id;
+            if (id === data.model) {
+              option.selected = true;
+            }
+            modelSelect.appendChild(option);
+          }
+          modelSelect.disabled = false;
+          saveModelBtn.disabled = false;
+          setSettingsStatus("Current model: " + data.model + ".", false);
+        } catch (err) {
+          setSettingsStatus("Network error: " + err.message, true);
+        }
+      }
+
+      async function saveModel() {
+        if (!adminKey) {
+          setSettingsStatus("Unlock first.", true);
+          return;
+        }
+
+        saveModelBtn.disabled = true;
+        setSettingsStatus("Saving…", false);
+
+        try {
+          const res = await fetch("/config/settings", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              Authorization: "Bearer " + adminKey,
+            },
+            body: JSON.stringify({ model: modelSelect.value }),
+          });
+
+          if (res.status === 401) {
+            setSettingsStatus("Invalid admin key.", true);
+            return;
+          }
+
+          if (!res.ok) {
+            setSettingsStatus("Unexpected error (" + res.status + ").", true);
+            return;
+          }
+
+          const data = await res.json();
+          setSettingsStatus("Saved. Model is now " + data.model + ".", false);
+        } catch (err) {
+          setSettingsStatus("Network error: " + err.message, true);
+        } finally {
+          saveModelBtn.disabled = false;
+        }
+      }
+
       unlockBtn.addEventListener("click", unlock);
       adminKeyInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") unlock();
       });
       copyTokenBtn.addEventListener("click", copyToken);
+      saveModelBtn.addEventListener("click", saveModel);
       refreshEventsBtn.addEventListener("click", refreshEvents);
     </script>
   </body>

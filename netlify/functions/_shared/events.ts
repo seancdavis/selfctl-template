@@ -1,4 +1,4 @@
-import { asc, gt } from "drizzle-orm";
+import { asc, gt, max } from "drizzle-orm";
 import type { db as dbClient } from "../../../db/index";
 import { events, type Event } from "../../../db/schema";
 
@@ -42,4 +42,16 @@ export async function readEvents(db: Db, sinceSeq: number): Promise<Event[]> {
     .from(events)
     .where(gt(events.seq, sinceSeq))
     .orderBy(asc(events.seq));
+}
+
+/**
+ * The true current max `seq` in the log (0 when empty). `GET /events` returns
+ * this as the cursor when a poll yields no new rows, instead of echoing the
+ * caller's `since` — so after a redeploy/reset (which restarts `seq`) the
+ * server cursor can go *backwards*, which is exactly what trips the app's
+ * cursor reset-recovery.
+ */
+export async function maxSeq(db: Db): Promise<number> {
+  const [row] = await db.select({ value: max(events.seq) }).from(events);
+  return row?.value ?? 0;
 }
