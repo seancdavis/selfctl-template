@@ -11,18 +11,11 @@ Run every command from the repo root, in a second terminal, with the dev server 
 
 ```sh
 lsof -ti :5173 | xargs kill                       # clear a leftover dev server
-AGENT_ADMIN_KEY=test-admin-key \
-  DEPLOY_PRIME_URL=http://localhost:5173 \
-  npm run dev                                     # port 5173
+AGENT_ADMIN_KEY=test-admin-key npm run dev        # port 5173
 ```
 
-`DEPLOY_PRIME_URL` is not optional locally. The kit addresses its background self-call at
-the deploy's *configured* origin (`DEPLOY_PRIME_URL`, then `URL`), falling back to the
-request's origin only when neither is set — so a forged `Host` header can't redirect the
-deploy's internal bearer. But `@netlify/config` always synthesizes one for local dev
-(`https://<branch>--site-name.netlify.app` unlinked, the real branch-deploy URL linked),
-and neither address is this machine. Without the override every turn ends
-`turn.finished{status:"error", error:"dispatch failed: 404"}`.
+No `DEPLOY_PRIME_URL` override needed: under `CONTEXT=dev` the kit self-invokes the dev
+server automatically instead of addressing the synthesized (and wrong) deploy origin.
 
 Then, in the second terminal:
 
@@ -100,7 +93,8 @@ sub-second a deploy answers in: the emulator runs the "background" function
 turn, the self-call reached `/_selfctl/turn`, the background function loaded the agent and
 started thinking — and then the Anthropic SDK found no credentials, because AI Gateway
 injects them only for a project linked to a Netlify site. `dispatch failed: …` in that
-slot is a *failure* (see `DEPLOY_PRIME_URL` above); a provider-auth error is not.
+slot is a *failure* (the self-call didn't reach `/_selfctl/turn` at all); a provider-auth
+error is not.
 
 `GET /agent/events/stream?since=0` — one `id:`/`event:`/`data:` frame per event, then a
 `: ping` every 15 seconds of silence, then at 50s:
