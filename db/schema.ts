@@ -46,7 +46,7 @@ export const pendingProposals = pgTable("pending_proposals", {
 });
 
 // The `reference.note` proposal kind's write target (see
-// `_shared/skills/notes.ts`): once a proposal is approved or overridden, its
+// `skills/notes.ts`): once a proposal is approved or overridden, its
 // `write()` lands a row here.
 export const notes = pgTable("notes", {
   id: uuid("id").primaryKey().defaultRandom(),
