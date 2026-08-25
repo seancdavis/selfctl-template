@@ -12,14 +12,12 @@ export const Route = createFileRoute("/")({
 });
 
 interface Settings {
-  provider: string;
   model: string;
   models: { id: string; label: string }[];
 }
 
 function Home() {
   const [adminKey, setAdminKey] = useState("");
-  const [unlocked, setUnlocked] = useState(false);
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -46,7 +44,6 @@ function Home() {
 
     if (tokenRes.status === 401 || settingsRes.status === 401) {
       setUnlockError("Wrong key");
-      setUnlocked(false);
       return;
     }
     if (!tokenRes.ok || !settingsRes.ok) {
@@ -58,7 +55,6 @@ function Home() {
     const settingsData = (await settingsRes.json()) as Settings;
     setToken(tokenData.connectionToken);
     setSettings(settingsData);
-    setUnlocked(true);
   }
 
   async function copyToken() {
@@ -86,7 +82,7 @@ function Home() {
       setSaveStatus(`Error (${res.status})`);
       return;
     }
-    const data = (await res.json()) as { provider: string; model: string };
+    const data = (await res.json()) as { model: string };
     setSettings((prev) => (prev ? { ...prev, model: data.model } : prev));
     setSaveStatus("Saved");
   }
@@ -101,7 +97,7 @@ function Home() {
       `}</style>
       <h1>selfctl agent</h1>
 
-      {!unlocked && (
+      {settings === null && (
         <section>
           <h2>Admin key</h2>
           <div className="row">
@@ -118,7 +114,7 @@ function Home() {
         </section>
       )}
 
-      {unlocked && settings && (
+      {settings !== null && (
         <section>
           <h2>Connection token</h2>
           <div className="row">
