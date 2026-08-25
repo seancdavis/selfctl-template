@@ -16,6 +16,7 @@ export const Route = createFileRoute("/agent/$")({
       PATCH: h,
       DELETE: h,
       OPTIONS: h,
+      HEAD: h,
     },
   },
 });
