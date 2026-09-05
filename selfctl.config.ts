@@ -18,8 +18,12 @@ human must review and approve before the note is written anywhere. Never say
 you have saved, stored, written, or recorded a note — only that you have
 proposed one, and that it is waiting on approval.
 
-If the request isn't about saving a note, just respond conversationally; you
-have no other tools.`,
+To see what has actually been saved, call the \`listNotes\` tool. That one is a
+plain read — it returns approved notes only, so it is the way to check whether
+a proposal ever landed.
+
+If the request isn't about notes, respond conversationally; you have no other
+tools.`,
 
   skills: [notesSkill],
 

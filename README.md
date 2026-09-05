@@ -74,18 +74,66 @@ Review the generated SQL, then commit the migration.
 - **Read anything directly.** Pages and server functions can query the
   database with Drizzle in a loader or server function — kit tables
   included. There's no API to go through for reads.
-- **Write only through `/agent/*`.** Every domain write is a proposal a human
-  decided on: `POST /agent/message` to say something to the agent,
-  `POST /agent/proposals/:id/decision` to approve or reject what it
-  proposed. A page that writes a domain table directly has walked around the
-  gate.
+- **Write only through `/agent/*`.** A page that writes a domain table
+  directly has walked around the gate. Which route it takes depends on who is
+  doing the writing — see below.
+
+## The four surfaces a skill has
+
+Two of these write. They differ by *who initiates*, not by how dangerous they
+are.
+
+| Surface | Initiated by | Approval | Declared with | Reached at |
+|---|---|---|---|---|
+| **Proposal** | the agent, mid-turn | yes | `defineProposalKind` + `rt.propose` | `POST /agent/proposals/:id/decision` |
+| **Mutation** | a client | no | `defineMutation` | `POST /agent/mutations` |
+| **Component** | the agent, mid-turn | writes nothing | `rt.emit(kind, payload)` | rides along on the chat reply |
+| **Widget** | a client, on demand | writes nothing | `WidgetProducer` | `GET /agent/summary/widgets` |
+
+**Proposals** are for writes the agent *wants*. Nothing lands until a decision
+arrives: `approve` writes the proposed payload, `override` writes a corrected
+one. `reject` and `rejectWithFeedback` write nothing at all — a rejected
+proposal leaves no trace in your tables, only in the kit's own
+`selfctl_proposals`.
+
+**Mutations** are for writes the human already performed by tapping something —
+a checkbox, a "mark as done" button. The decision happened in the UI, so asking
+for it again is noise. `defineMutation` looks exactly like
+`defineProposalKind`, but it applies immediately, and only a client can apply
+one; a skill's own tools cannot.
+
+**Components** and **widgets** don't write. `rt.emit("reference.note-list", …)`
+attaches a typed payload to the assistant's reply so a client can render a card
+instead of a paragraph; a widget does the same for at-a-glance state, produced
+on request rather than during a turn. Both kinds are free-form strings.
+
+Declaring mutations, widgets or task handlers adds `mutations`, `widgets` or
+`scheduler` to what `GET /agent/summary` advertises.
+
+> Cards are rendered by the *client*, and a client only renders the kinds it
+> knows about. In the selfctl desktop app an unknown proposal kind falls back
+> to a JSON dump, and an unknown component renders nothing at all.
 
 ## Adding a skill
 
-A skill is tools (read), proposals (write, gated by human approval), and
-optional task handlers (deterministic work the tick runs later). Start from
-`skills/notes.ts` and register the new skill in `selfctl.config.ts`'s
-`skills: [...]` array.
+A skill bundles those surfaces, plus task handlers — deterministic work the
+scheduled tick drains later:
+
+```ts
+export const mySkill: Skill = {
+  name: "my-skill",
+  tools: (rt) => [ /* what the model can call */ ],
+  proposals: [ /* gated writes */ ],
+  mutations: [ /* ungated, client-applied writes */ ],
+  widgets: [ /* at-a-glance cards */ ],
+  taskHandlers: [ /* work the tick drains */ ],
+};
+```
+
+Only `name` is required. Tools read through `rt.db`, a read seam over the same
+database your pages query. Start from `skills/notes.ts` — it shows a proposal
+kind, the tool that proposes it, and a read tool that emits a component — then
+register the new skill in `selfctl.config.ts`'s `skills: [...]` array.
 
 ## Local dev
 

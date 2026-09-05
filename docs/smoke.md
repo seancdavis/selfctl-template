@@ -29,7 +29,7 @@ npx netlify database migrations apply             # "No pending migrations to ap
 ```sh
 # 1. Auth gate + protocol version
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5173/agent/summary   # 401
-curl -s -H "$K" http://localhost:5173/agent/summary                            # 200, protocolVersion "0.2"
+curl -s -H "$K" http://localhost:5173/agent/summary                            # 200, protocolVersion "0.3"
 
 # 2. A thread. Body may be {} or {"title":"..."}; the response carries the id.
 curl -s -X POST -H "$K" -H "content-type: application/json" \
@@ -70,7 +70,7 @@ lsof -ti :5173 | xargs kill
 `GET /agent/summary` — 401 bare, then:
 
 ```json
-{"agentId":"reference","displayName":"Reference","protocolVersion":"0.2","kitVersion":"0.4.0",
+{"agentId":"reference","displayName":"Reference","protocolVersion":"0.3","kitVersion":"0.5.4",
  "transports":["http"],"capabilities":["message","events","events.stream","threads","decision","models","visibility","admin"]}
 ```
 
