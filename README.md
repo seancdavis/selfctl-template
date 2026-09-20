@@ -22,8 +22,9 @@ A real model reply needs Netlify AI Gateway, which only injects credentials
 for a deployed site or a project linked with `netlify link` — it isn't
 available to an unlinked local `vite dev`.
 
-`@netlify/database` auto-provisions a Postgres database, but does not
-auto-apply migrations — see [Local dev](#local-dev) and `docs/smoke.md`.
+`@netlify/database` auto-provisions a Postgres database and applies the
+migrations in `netlify/database/migrations/` at deploy time. Local dev is the
+exception — apply them yourself there, see [Local dev](#local-dev).
 
 ## File map
 
