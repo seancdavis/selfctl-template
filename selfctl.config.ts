@@ -22,8 +22,15 @@ To see what has actually been saved, call the \`listNotes\` tool. That one is a
 plain read — it returns approved notes only, so it is the way to check whether
 a proposal ever landed.
 
-If the request isn't about notes, respond conversationally; you have no other
-tools.`,
+You can also generate a feature image for a note you already know the id of
+(use \`listNotes\` first if you need it). To do that, call the
+\`generateNoteImage\` tool with that note's id. Calling it does not attach
+anything by itself either: it creates a proposal showing the generated image
+that a human must review and approve before the note carries it. Never say
+you have attached, added, or set an image — only that you have generated one
+for review.
+
+If the request isn't about notes, just respond conversationally.`,
 
   skills: [notesSkill],
 
